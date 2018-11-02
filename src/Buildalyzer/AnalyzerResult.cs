@@ -97,6 +97,16 @@ namespace Buildalyzer
                     Path.Combine(Path.GetDirectoryName(ProjectFilePath), x.ItemSpec)))
                 : Array.Empty<string>();
 
+        /// <summary>
+        /// Contains the <code>PackageReference</code> items for the project.
+        /// The key is a package ID and the value is a <see cref="IReadOnlyDictionary{string, string}"/>
+        /// that includes all the package reference metadata, typically including a "Version" key.
+        /// </summary>
+        public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> PackageReferences =>
+            Items.TryGetValue("PackageReference", out ProjectItem[] items)
+                ? items.Distinct(new ProjectItemItemSpecEqualityComparer()).ToDictionary(x => x.ItemSpec, x => x.Metadata)
+                : new Dictionary<string, IReadOnlyDictionary<string, string>>();
+        
         internal void ProcessProject(ProjectStartedEventArgs e)
         {
             // Add properties
@@ -112,10 +122,10 @@ namespace Buildalyzer
             }
         }
 
-        internal void ProcessCscCommandLine(string commandLine)
+        internal void ProcessCscCommandLine(string commandLine, bool coreCompile)
         {
-            //TODO: HACK - CSC gets called twice for Web projects with Razor pages, this ignores the 2nd pass
-            if (string.IsNullOrWhiteSpace(commandLine) || _cscCommandLineArguments != null)
+            // Some projects can have multiple Csc calls (see #92) so if this is the one inside CoreCompile use it, otherwise use the first
+            if (string.IsNullOrWhiteSpace(commandLine) || (_cscCommandLineArguments != null && !coreCompile))
             {
                 return;
             }
@@ -179,6 +189,12 @@ namespace Buildalyzer
                         parts[c].Substring(valueStart)));
                 }
             }
+        }
+
+        private class ProjectItemItemSpecEqualityComparer : IEqualityComparer<ProjectItem>
+        {
+            public bool Equals(ProjectItem x, ProjectItem y) => x.ItemSpec.Equals(y.ItemSpec);
+            public int GetHashCode(ProjectItem obj) => obj.ItemSpec.GetHashCode();
         }
     }
 }
